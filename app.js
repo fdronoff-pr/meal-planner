@@ -307,6 +307,29 @@ function createAccount(){
   try { localStorage.setItem(accountStateKey(id), JSON.stringify(defaultState())); } catch(e){}
   CREATE_ACCOUNT = { name:'', avatar:0 }; selectAccount(id);
 }
+var EDIT_ACCOUNT = { name:'', avatar:0 };
+function openAccountDetails(){
+  var account = activeAccount(); if (!account) return;
+  EDIT_ACCOUNT = { name:account.name, avatar:Number(account.avatar)||0 };
+  ACCOUNT_SCREEN = 'details'; UI.modal = null; PENDING_FOCUS = null; render();
+}
+function saveAccountDetails(){
+  var account = activeAccount();
+  var name = String(EDIT_ACCOUNT.name || '').trim();
+  if (!account || !name) return;
+  account.name = name; account.avatar = Number(EDIT_ACCOUNT.avatar)||0;
+  saveAccountRegistry(); ACCOUNT_SCREEN = 'app'; render();
+}
+function signOut(){
+  persistLocal(); ACTIVE_ACCOUNT_ID = null; ACCOUNT_SCREEN = 'select'; UI.modal = null; render();
+}
+function deleteActiveAccount(){
+  if (!ACTIVE_ACCOUNT_ID) return;
+  var id = ACTIVE_ACCOUNT_ID;
+  try { localStorage.removeItem(accountStateKey(id)); } catch(e){}
+  ACCOUNTS = ACCOUNTS.filter(function(a){ return a.id !== id; });
+  saveAccountRegistry(); ACTIVE_ACCOUNT_ID = null; ACCOUNT_SCREEN = 'select'; UI.modal = null; render();
+}
 
 var scheduleSave = debounce(persistLocal, 1200);
 function persist(){ persistLocal(); }
@@ -549,6 +572,8 @@ function render(){
     app.innerHTML = renderAccountSelect();
   } else if (ACCOUNT_SCREEN === 'create'){
     app.innerHTML = renderAccountCreate();
+  } else if (ACCOUNT_SCREEN === 'details'){
+    app.innerHTML = renderAccountDetails();
   } else if (!STATE.profile.setupComplete){
     app.innerHTML = renderWizardScreen();
   } else {
@@ -579,6 +604,16 @@ function renderAccountCreate(){
     '<div class="field"><label>Choose your icon</label><div class="avatar-grid">' + Array.from({length:12},function(_,i){ return '<button class="avatar-choice ' + (CREATE_ACCOUNT.avatar===i?'selected':'') + '" data-action="choose-avatar" data-avatar="' + i + '" aria-label="Choose profile icon ' + (i+1) + '">' + renderAvatar(i,false) + '</button>'; }).join('') + '</div></div>' +
     '<div class="account-form__actions"><button class="btn btn--ghost" data-action="cancel-create-account">Back</button><button class="btn btn--primary" data-action="create-account" ' + (!CREATE_ACCOUNT.name.trim()?'disabled':'') + '>Create account</button></div></div></section></div>';
 }
+function renderAccountDetails(){
+  var account = activeAccount();
+  if (!account){ ACCOUNT_SCREEN = 'select'; return renderAccountSelect(); }
+  return '<div class="account-gate"><section class="account-panel"><div class="account-details-head"><button class="btn btn--ghost" data-action="close-account-details">Back</button><div class="account-head"><h1>Account details</h1><p>Edit your account name and profile icon.</p></div><span class="account-head-spacer"></span></div>' +
+    '<div class="account-form"><div class="field"><label for="edit-account-name-input">Account name</label><input class="input" id="edit-account-name-input" maxlength="30" value="' + esc(EDIT_ACCOUNT.name) + '"></div>' +
+    '<div class="field"><label>Profile icon</label><div class="avatar-grid">' + Array.from({length:12},function(_,i){ return '<button class="avatar-choice ' + (EDIT_ACCOUNT.avatar===i?'selected':'') + '" data-action="choose-edit-avatar" data-avatar="' + i + '" aria-label="Choose profile icon ' + (i+1) + '">' + renderAvatar(i,false) + '</button>'; }).join('') + '</div></div>' +
+    '<button class="btn btn--primary btn--block" data-action="save-account-details" ' + (!EDIT_ACCOUNT.name.trim()?'disabled':'') + '>Save changes</button>' +
+    '<div class="account-actions"><button class="btn btn--block" data-action="sign-out">Sign out</button><button class="btn btn--danger btn--block" data-action="confirm-delete-account">Delete account</button></div>' +
+    '<p class="account-delete-note">Deleting this account permanently removes its goals, meal plans and food history from this browser.</p></div></section></div>';
+}
 var PENDING_FOCUS = null;
 function focusPendingField(){
   if (!PENDING_FOCUS) return;
@@ -593,7 +628,7 @@ function renderShell(){
   return (
     '<div class="topbar">' +
       '<div class="topbar__brand">Portion</div>' +
-      '<button class="account-switch" style="width:auto" data-action="switch-account" aria-label="Switch account">' + renderAvatar(account.avatar,true) + '</button>' +
+      '<button class="account-switch" style="width:auto" data-action="open-account-details" aria-label="Open account details">' + renderAvatar(account.avatar,true) + '</button>' +
       '<div class="topnav">' + NAV_ITEMS.map(function(n){
         return '<button data-action="nav" data-view="' + n.key + '" class="' + (UI.activeView===n.key?'active':'') + '">' + n.label + '</button>';
       }).join('') + '</div>' +
@@ -604,7 +639,7 @@ function renderShell(){
         '<div class="nav">' + NAV_ITEMS.map(function(n){
           return '<button class="navlink ' + (UI.activeView===n.key?'active':'') + '" data-action="nav" data-view="' + n.key + '"><span class="dot"></span>' + n.label + '</button>';
         }).join('') + '</div>' +
-        '<div class="sidebar__foot"><button class="account-switch" data-action="switch-account">' + renderAvatar(account.avatar,true) + '<span><span class="account-switch__name">' + esc(account.name) + '</span><span class="account-switch__hint">Switch account</span></span></button><div class="hint" style="padding:6px 8px 0">' + esc(STATE.profile.dailyCalorieTarget) + ' kcal/day target</div></div>' +
+        '<div class="sidebar__foot"><button class="account-switch" data-action="open-account-details">' + renderAvatar(account.avatar,true) + '<span><span class="account-switch__name">' + esc(account.name) + '</span><span class="account-switch__hint">Account</span></span></button><div class="hint" style="padding:6px 8px 0">' + esc(STATE.profile.dailyCalorieTarget) + ' kcal/day target</div></div>' +
       '</div>' +
       '<div class="main"><div class="container">' + renderActiveView() + '</div></div>' +
     '</div>' +
@@ -1283,7 +1318,14 @@ function onAppClick(e){
     case 'cancel-create-account': ACCOUNT_SCREEN = 'select'; render(); break;
     case 'choose-avatar': CREATE_ACCOUNT.avatar = Number(actionEl.getAttribute('data-avatar')); render(); break;
     case 'create-account': createAccount(); break;
-    case 'switch-account': ACTIVE_ACCOUNT_ID = null; ACCOUNT_SCREEN = 'select'; UI.modal = null; render(); break;
+    case 'open-account-details': openAccountDetails(); break;
+    case 'close-account-details': ACCOUNT_SCREEN = 'app'; render(); break;
+    case 'choose-edit-avatar': EDIT_ACCOUNT.avatar = Number(actionEl.getAttribute('data-avatar')); render(); break;
+    case 'save-account-details': saveAccountDetails(); break;
+    case 'sign-out': signOut(); break;
+    case 'confirm-delete-account':
+      if (window.confirm('Delete ' + ((activeAccount() || {}).name || 'this account') + '? This permanently removes its goals, meal plans and food history from this browser.')) deleteActiveAccount();
+      break;
     case 'nav': UI.activeView = actionEl.getAttribute('data-view'); render(); break;
     case 'date-prev': UI.selectedDate = addDaysISO(UI.selectedDate, -1); render(); break;
     case 'date-next': UI.selectedDate = addDaysISO(UI.selectedDate, 1); render(); break;
@@ -1318,6 +1360,12 @@ function onAppInput(e){
     CREATE_ACCOUNT.name = e.target.value;
     var createBtn = document.querySelector('[data-action="create-account"]');
     if (createBtn) createBtn.disabled = !CREATE_ACCOUNT.name.trim();
+    return;
+  }
+  if (id === 'edit-account-name-input'){
+    EDIT_ACCOUNT.name = e.target.value;
+    var saveAccountBtn = document.querySelector('[data-action="save-account-details"]');
+    if (saveAccountBtn) saveAccountBtn.disabled = !EDIT_ACCOUNT.name.trim();
     return;
   }
   if (id === 'modal-search-input'){
