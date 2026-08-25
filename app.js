@@ -514,17 +514,18 @@ function saveBuiltFood(name, rows){
   rows.forEach(function(row){
     var ing = INGREDIENTS_DB.find(function(i){ return i.id === row.ingredientId; });
     if (!ing || !row.grams) return;
+    var nutrition = row.raw && ing.raw ? ing.raw : ing;
     var factor = row.grams / 100;
-    totals.kcal += ing.kcal * factor;
-    totals.p += ing.p * factor;
-    totals.c += ing.c * factor;
-    totals.f += ing.f * factor;
+    totals.kcal += nutrition.kcal * factor;
+    totals.p += nutrition.p * factor;
+    totals.c += nutrition.c * factor;
+    totals.f += nutrition.f * factor;
   });
   var base = { kcal: round(totals.kcal), p: Math.round(totals.p*10)/10, c: Math.round(totals.c*10)/10, f: Math.round(totals.f*10)/10 };
   var item = { id: uid(), name: name, serving: '1 serving (as built)', kcal: base.kcal, p: base.p, c: base.c, f: base.f,
     kind:'built', ingredients: rows.map(function(row){
       var ing = INGREDIENTS_DB.find(function(i){ return i.id === row.ingredientId; });
-      return { name: ing ? ing.name : '?', grams: row.grams };
+      return { name: ing ? ing.name + (row.raw ? ' (raw)' : '') : '?', grams: row.grams, raw:!!row.raw };
     }) };
   STATE.library.unshift(item);
   return { item:item, base:base };
@@ -761,7 +762,7 @@ function openAddModal(meal){
   UI.modal = {
     meal: meal, tab:'search', query:'', results:{yours:[],common:[]}, selected:null,
     portionWhole:1, portionFrac:'0',
-    build:{ name:'', rows:[{ ingredientId:null, ingredientName:'', grams:100, query:'' }], portionWhole:1, portionFrac:'0' }
+    build:{ name:'', rows:[{ ingredientId:null, ingredientName:'', grams:100, query:'', raw:false }], portionWhole:1, portionFrac:'0' }
   };
   render();
 }
@@ -949,10 +950,11 @@ function renderIngredientRow(row, i){
       '<div style="position:relative;">' +
         '<input class="input" id="ing-search-' + i + '" placeholder="Search ingredient…" autocomplete="off" value="' + esc(row.ingredientName || row.query) + '">' +
         (suggestions.length ? '<div class="ingredient-row__result" id="ing-results-' + i + '">' + suggestions.map(function(ing){
-          return '<div data-action="pick-ingredient" data-idx="' + i + '" data-ing="' + ing.id + '">' + esc(ing.name) + ' <span class="hint">(' + ing.kcal + ' kcal/100g)</span></div>';
+          return '<div data-action="pick-ingredient" data-idx="' + i + '" data-ing="' + ing.id + '">' + esc(ing.name) + '</div>';
         }).join('') + '</div>' : '') +
       '</div>' +
       '<input class="input" type="number" min="0" step="1" id="ing-grams-' + i + '" placeholder="grams" value="' + (row.grams || '') + '">' +
+      (row.ingredientId ? '<label class="ingredient-raw"><input type="checkbox" id="ing-raw-' + i + '" ' + (row.raw?'checked':'') + '> Raw</label>' : '<span></span>') +
       '<button class="icon-btn" data-action="remove-ing-row" data-idx="' + i + '" aria-label="Remove ingredient">&times;</button>' +
     '</div>'
   );
@@ -1222,7 +1224,7 @@ function handleConfirmAdd(){
 }
 function removeIngRow(idx){
   var rows = UI.modal.build.rows;
-  if (rows.length <= 1) rows[idx] = { ingredientId:null, ingredientName:'', grams:100, query:'' };
+  if (rows.length <= 1) rows[idx] = { ingredientId:null, ingredientName:'', grams:100, query:'', raw:false };
   else rows.splice(idx, 1);
   render();
 }
@@ -1230,7 +1232,7 @@ function pickIngredient(idx, ingId){
   var ing = INGREDIENTS_DB.find(function(i){ return i.id === ingId; });
   if (!ing) return;
   var row = UI.modal.build.rows[idx];
-  row.ingredientId = ing.id; row.ingredientName = ing.name; row.query = '';
+  row.ingredientId = ing.id; row.ingredientName = ing.name; row.query = ''; row.raw = false;
   render();
   PENDING_FOCUS = 'ing-grams-' + idx;
 }
@@ -1338,7 +1340,7 @@ function onAppClick(e){
     case 'edit-entry': openEditEntryModal(actionEl.getAttribute('data-meal'), actionEl.getAttribute('data-id')); break;
     case 'save-edit-entry': handleSaveEditEntry(); break;
     case 'remove-entry-modal': removeLogEntry(UI.selectedDate, UI.modal.meal, UI.modal.entryId); closeAddModal(); break;
-    case 'add-ing-row': UI.modal.build.rows.push({ ingredientId:null, ingredientName:'', grams:100, query:'' }); PENDING_FOCUS = 'ing-search-' + (UI.modal.build.rows.length-1); render(); break;
+    case 'add-ing-row': UI.modal.build.rows.push({ ingredientId:null, ingredientName:'', grams:100, query:'', raw:false }); PENDING_FOCUS = 'ing-search-' + (UI.modal.build.rows.length-1); render(); break;
     case 'remove-ing-row': removeIngRow(Number(actionEl.getAttribute('data-idx'))); break;
     case 'pick-ingredient': pickIngredient(Number(actionEl.getAttribute('data-idx')), actionEl.getAttribute('data-ing')); break;
     case 'save-build': handleSaveBuild(); break;
@@ -1382,14 +1384,14 @@ function onAppInput(e){
   if (id.indexOf('ing-search-') === 0){
     var idx = Number(id.slice('ing-search-'.length));
     var row = UI.modal.build.rows[idx];
-    row.query = e.target.value; row.ingredientId = null; row.ingredientName = '';
+    row.query = e.target.value; row.ingredientId = null; row.ingredientName = ''; row.raw = false;
     var wrap = e.target.parentElement;
     var existing = document.getElementById('ing-results-' + idx);
     if (existing) existing.remove();
     var suggestions = row.query ? searchIngredients(row.query) : [];
     if (suggestions.length){
       var html = '<div class="ingredient-row__result" id="ing-results-' + idx + '">' + suggestions.map(function(ing){
-        return '<div data-action="pick-ingredient" data-idx="' + idx + '" data-ing="' + ing.id + '">' + esc(ing.name) + ' <span class="hint">(' + ing.kcal + ' kcal/100g)</span></div>';
+        return '<div data-action="pick-ingredient" data-idx="' + idx + '" data-ing="' + ing.id + '">' + esc(ing.name) + '</div>';
       }).join('') + '</div>';
       wrap.insertAdjacentHTML('beforeend', html);
     }
@@ -1406,6 +1408,12 @@ function onAppInput(e){
 function onAppChange(e){
   var id = e.target.id;
   if (!id) return;
+  if (id.indexOf('ing-raw-') === 0){
+    var rawIdx = Number(id.slice('ing-raw-'.length));
+    UI.modal.build.rows[rawIdx].raw = !!e.target.checked;
+    updateBuildTotalsDisplay();
+    return;
+  }
   if (id === 'modal-portion-whole'){ UI.modal.portionWhole = Number(e.target.value); render(); return; }
   if (id === 'modal-portion-frac'){ UI.modal.portionFrac = e.target.value; render(); return; }
   if (id === 'build-portion-whole'){ UI.modal.build.portionWhole = Number(e.target.value); render(); return; }
@@ -1446,8 +1454,9 @@ function computeBuildTotals(rows){
   rows.forEach(function(row){
     var ing = INGREDIENTS_DB.find(function(i){ return i.id === row.ingredientId; });
     if (!ing || !row.grams) return;
+    var nutrition = row.raw && ing.raw ? ing.raw : ing;
     var factor = row.grams / 100;
-    t.kcal += ing.kcal * factor; t.p += ing.p * factor; t.c += ing.c * factor; t.f += ing.f * factor;
+    t.kcal += nutrition.kcal * factor; t.p += nutrition.p * factor; t.c += nutrition.c * factor; t.f += nutrition.f * factor;
   });
   return { kcal: round(t.kcal), p: Math.round(t.p*10)/10, c: Math.round(t.c*10)/10, f: Math.round(t.f*10)/10 };
 }
