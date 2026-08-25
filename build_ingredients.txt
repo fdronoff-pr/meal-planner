@@ -1,0 +1,106 @@
+import json, re, sys
+from decimal import Decimal
+import ijson
+
+def get_macro(nutrients):
+    kcal = p = c = f = None
+    for n in nutrients:
+        nut = n.get('nutrient', {})
+        num = nut.get('number')
+        unit = (nut.get('unitName') or '').lower()
+        amt = n.get('amount')
+        if amt is None:
+            continue
+        amt = float(amt)
+        if num == '208' and unit == 'kcal':
+            kcal = amt
+        elif num == '957' and kcal is None:  # Atwater General kcal fallback (Foundation-style)
+            kcal = amt
+        elif num == '203':
+            p = amt
+        elif num == '204':
+            f = amt
+        elif num == '205':
+            c = amt
+    return kcal, p, c, f
+
+def clean_name(desc):
+    return re.sub(r'\s+', ' ', desc.strip())
+
+def norm(s):
+    s = s.lower().strip()
+    s = re.sub(r'\s+', ' ', s)
+    s = re.sub(r'[.,;]+$', '', s)
+    return s
+
+# 1. Foundation Foods (already extracted)
+with open('extracted_ingredients.json') as f:
+    foundation = json.load(f)
+foundation_records = []
+for item in foundation:
+    foundation_records.append({
+        'name': clean_name(item['name']),
+        'kcal': round(item['kcal']),
+        'p': round(item['p'], 1),
+        'c': round(item['c'], 1),
+        'f': round(item['f'], 1),
+        'src': 'foundation',
+    })
+print('foundation:', len(foundation_records), file=sys.stderr)
+
+# 2. Survey (FNDDS)
+with open('survey/surveyDownload.json') as f:
+    survey_data = json.load(f)
+survey_records = []
+skipped_no_kcal = 0
+for item in survey_data['SurveyFoods']:
+    desc = item.get('description') or ''
+    if not desc:
+        continue
+    kcal, p, c, f = get_macro(item.get('foodNutrients') or [])
+    if kcal is None:
+        skipped_no_kcal += 1
+        continue
+    survey_records.append({
+        'name': clean_name(desc),
+        'kcal': round(kcal),
+        'p': round(p or 0, 1),
+        'c': round(c or 0, 1),
+        'f': round(f or 0, 1),
+        'src': 'survey',
+    })
+print('survey:', len(survey_records), 'skipped_no_kcal:', skipped_no_kcal, file=sys.stderr)
+del survey_data
+
+# 3. SR Legacy (stream via ijson due to file size)
+sr_records = []
+skipped_no_kcal_sr = 0
+with open('sr_legacy/FoodData_Central_sr_legacy_food_json_2018-04.json', 'rb') as f:
+    items = ijson.items(f, 'SRLegacyFoods.item')
+    for item in items:
+        desc = item.get('description') or ''
+        if not desc:
+            continue
+        nutrients = item.get('foodNutrients') or []
+        # Decimal -> float conversion happens naturally via float() in get_macro
+        kcal, p, c, f = get_macro(nutrients)
+        if kcal is None:
+            skipped_no_kcal_sr += 1
+            continue
+        sr_records.append({
+            'name': clean_name(desc),
+            'kcal': round(kcal),
+            'p': round(p or 0, 1),
+            'c': round(c or 0, 1),
+            'f': round(f or 0, 1),
+            'src': 'sr_legacy',
+        })
+print('sr_legacy:', len(sr_records), 'skipped_no_kcal:', skipped_no_kcal_sr, file=sys.stderr)
+
+with open('sr_records_raw.json', 'w') as f:
+    json.dump(sr_records, f)
+with open('survey_records_raw.json', 'w') as f:
+    json.dump(survey_records, f)
+with open('foundation_records_raw.json', 'w') as f:
+    json.dump(foundation_records, f)
+print('done extraction', file=sys.stderr)
