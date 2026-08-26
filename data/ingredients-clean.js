@@ -3,6 +3,8 @@
 var INGREDIENTS_DB = [
   {id:'chicken_breast',name:'Chicken breast',kcal:165,p:31,c:0,f:3.6,raw:{kcal:120,p:22.5,c:0,f:2.6}},
   {id:'chicken_thigh',name:'Chicken thigh',kcal:209,p:26,c:0,f:10.9,raw:{kcal:177,p:18.6,c:0,f:11}},
+  {id:'chicken_drumstick',name:'Chicken drumstick',kcal:175,p:28.3,c:0,f:5.7,raw:{kcal:161,p:18.1,c:0,f:9.2}},
+  {id:'chicken_wings',name:'Chicken wings',kcal:290,p:26.9,c:0,f:19.5,raw:{kcal:191,p:17.5,c:0,f:13.8}},
   {id:'turkey_breast',name:'Turkey breast',kcal:147,p:30,c:0,f:2.1,raw:{kcal:114,p:23.7,c:0,f:1.5}},
   {id:'duck_breast',name:'Duck breast',kcal:201,p:23.5,c:0,f:11.2,raw:{kcal:123,p:19.9,c:0,f:4.3}},
   {id:'beef_lean',name:'Lean beef',kcal:217,p:26.1,c:0,f:11.8,raw:{kcal:176,p:20,c:0,f:10}},

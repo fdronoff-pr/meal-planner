@@ -4,6 +4,7 @@
   "main": "worker/index.js",
   "compatibility_date": "2026-08-25",
   "compatibility_flags": ["nodejs_compat"],
+  "keep_vars": true,
   "build": {
     "command": "npm run build"
   },
@@ -12,6 +13,13 @@
     "binding": "ASSETS",
     "run_worker_first": ["/api/*"]
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "portion-meal-planner-db",
+      "database_id": "a92dabc8-57a5-416a-95d8-d744047ea621"
+    }
+  ],
   "observability": {
     "enabled": true,
     "logs": {

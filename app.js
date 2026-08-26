@@ -419,6 +419,20 @@ function searchIngredients(query){
   if (!q) return [];
   return rankMatches(INGREDIENTS_DB, q, function(i){ return i.name; }, function(i){ return i.nameNorm; });
 }
+async function loadSharedIngredients(){
+  try {
+    var response = await fetch('/api/ingredients');
+    if (!response.ok) return;
+    var payload = await response.json();
+    (payload.ingredients || []).forEach(function(item){
+      if (!INGREDIENTS_DB.some(function(existing){ return existing.id === item.id || norm(existing.name) === norm(item.name); })){
+        item.nameNorm = norm(item.name); INGREDIENTS_DB.push(item);
+      }
+    });
+    INGREDIENTS_DB.sort(function(a,b){ return a.name.localeCompare(b.name); });
+    if (ACCOUNT_SCREEN === 'app') render();
+  } catch(e){}
+}
 function findLibraryByName(name){
   var n = norm(name);
   return STATE.library.find(function(i){ return norm(i.name) === n; });
@@ -762,7 +776,8 @@ function openAddModal(meal){
   UI.modal = {
     meal: meal, tab:'search', query:'', results:{yours:[],common:[]}, selected:null,
     portionWhole:1, portionFrac:'0',
-    build:{ name:'', rows:[{ ingredientId:null, ingredientName:'', grams:100, query:'', raw:false }], portionWhole:1, portionFrac:'0' }
+    build:{ name:'', rows:[{ ingredientId:null, ingredientName:'', grams:100, query:'', raw:false }], portionWhole:1, portionFrac:'0',
+      lookup:{ open:false, query:'', status:'idle', candidate:null, confirmationToken:null, error:'' } }
   };
   render();
 }
@@ -920,6 +935,7 @@ function renderPortionSelector(prefix, whole, fracKey){
 
 function renderBuildTab(m){
   var b = m.build;
+  if (!b.lookup) b.lookup = { open:false, query:'', status:'idle', candidate:null, confirmationToken:null, error:'' };
   var totals = computeBuildTotals(b.rows);
   var portion = portionTotal(b.portionWhole, b.portionFrac);
   var scaled = scaleNutrition(totals, portion || 0);
@@ -929,7 +945,9 @@ function renderBuildTab(m){
     '<div style="margin-top:14px;"><label class="hint" style="display:block;margin-bottom:8px;">Ingredients (from our ingredient list, by weight)</label>' +
       '<div id="ingredient-rows">' + b.rows.map(function(row, i){ return renderIngredientRow(row, i); }).join('') + '</div>' +
       '<button class="btn btn--sm btn--ghost" data-action="add-ing-row">+ Add ingredient</button>' +
+      '<button class="btn btn--sm btn--ghost" data-action="open-ingredient-lookup">Can\'t find it? Add ingredient</button>' +
     '</div>' +
+    renderIngredientLookup(b.lookup) +
     '<div class="preview-row" style="margin-top:14px;" id="build-totals">' +
       '<span class="badge badge--kcal num">' + round(totals.kcal) + ' kcal total</span>' +
       '<span class="badge badge--protein">' + totals.p + 'g protein</span>' +
@@ -942,6 +960,20 @@ function renderBuildTab(m){
     '</div>' +
     '<div style="margin-top:16px;"><button class="btn btn--primary btn--block" data-action="save-build" ' + (!b.name.trim() || totals.kcal<=0 || portion<=0 ? 'disabled':'') + '>Save food &amp; add to log</button></div>'
   );
+}
+function renderIngredientLookup(lookup){
+  if (!lookup.open) return '';
+  var candidate = lookup.candidate;
+  return '<section class="ingredient-lookup">' +
+    '<div class="ingredient-lookup__head"><div><strong>Add a shared ingredient</strong><div class="hint">Google will find values per 100g. Review them before publishing.</div></div><button class="icon-btn" data-action="close-ingredient-lookup" aria-label="Close">&times;</button></div>' +
+    '<div class="ingredient-lookup__search"><input class="input" id="ingredient-lookup-query" maxlength="80" placeholder="e.g. chicken wings" value="' + esc(lookup.query) + '"><button class="btn btn--primary" data-action="search-missing-ingredient" ' + (lookup.status==='searching'||lookup.query.trim().length<2?'disabled':'') + '>' + (lookup.status==='searching'?'Searching…':'Search Google') + '</button></div>' +
+    (lookup.error ? '<div class="lookup-error">' + esc(lookup.error) + '</div>' : '') +
+    (candidate ? '<div class="lookup-candidate"><h4>' + esc(candidate.name) + '</h4>' +
+      '<div class="lookup-values"><div><span>Cooked</span><strong>' + candidate.cooked.kcal + ' kcal</strong><small>P ' + candidate.cooked.protein + 'g · C ' + candidate.cooked.carbs + 'g · F ' + candidate.cooked.fat + 'g</small></div>' +
+      '<div><span>Raw</span><strong>' + candidate.raw.kcal + ' kcal</strong><small>P ' + candidate.raw.protein + 'g · C ' + candidate.raw.carbs + 'g · F ' + candidate.raw.fat + 'g</small></div></div>' +
+      '<div class="lookup-sources"><span class="hint">Sources:</span> ' + candidate.sourceUrls.map(function(url,i){ return '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">Source ' + (i+1) + '</a>'; }).join(' · ') + '</div>' +
+      '<button class="btn btn--primary btn--block" data-action="publish-shared-ingredient" ' + (lookup.status==='publishing'?'disabled':'') + '>' + (lookup.status==='publishing'?'Adding…':'Confirm and add for everyone') + '</button></div>' : '') +
+    '</section>';
 }
 function renderIngredientRow(row, i){
   var suggestions = row.query && !row.ingredientId ? searchIngredients(row.query) : [];
@@ -1236,6 +1268,34 @@ function pickIngredient(idx, ingId){
   render();
   PENDING_FOCUS = 'ing-grams-' + idx;
 }
+async function searchMissingIngredient(){
+  var lookup = UI.modal && UI.modal.build && UI.modal.build.lookup;
+  if (!lookup || lookup.query.trim().length < 2) return;
+  lookup.status = 'searching'; lookup.error = ''; lookup.candidate = null; render();
+  try {
+    var response = await fetch('/api/ingredients/search', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:lookup.query}) });
+    var payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || 'Search failed.');
+    lookup.candidate = payload.candidate; lookup.confirmationToken = payload.confirmationToken; lookup.status = 'idle'; render();
+  } catch(error){ lookup.status = 'idle'; lookup.error = error.message || 'Search failed.'; render(); }
+}
+async function publishSharedIngredient(){
+  var build = UI.modal && UI.modal.build;
+  var lookup = build && build.lookup;
+  if (!lookup || !lookup.candidate || !lookup.confirmationToken) return;
+  lookup.status = 'publishing'; lookup.error = ''; render();
+  try {
+    var response = await fetch('/api/ingredients', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({confirmationToken:lookup.confirmationToken}) });
+    var payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || 'Could not add ingredient.');
+    var item = payload.ingredient; item.nameNorm = norm(item.name); INGREDIENTS_DB.push(item);
+    INGREDIENTS_DB.sort(function(a,b){ return a.name.localeCompare(b.name); });
+    var row = build.rows.find(function(candidateRow){ return !candidateRow.ingredientId; });
+    if (!row){ row = {ingredientId:null,ingredientName:'',grams:100,query:'',raw:false}; build.rows.push(row); }
+    row.ingredientId = item.id; row.ingredientName = item.name; row.raw = false; row.query = '';
+    build.lookup = {open:false,query:'',status:'idle',candidate:null,confirmationToken:null,error:''}; render();
+  } catch(error){ lookup.status = 'idle'; lookup.error = error.message || 'Could not add ingredient.'; render(); }
+}
 function handleSaveBuild(){
   var b = UI.modal.build;
   var nameInput = document.getElementById('build-name-input');
@@ -1341,6 +1401,10 @@ function onAppClick(e){
     case 'save-edit-entry': handleSaveEditEntry(); break;
     case 'remove-entry-modal': removeLogEntry(UI.selectedDate, UI.modal.meal, UI.modal.entryId); closeAddModal(); break;
     case 'add-ing-row': UI.modal.build.rows.push({ ingredientId:null, ingredientName:'', grams:100, query:'', raw:false }); PENDING_FOCUS = 'ing-search-' + (UI.modal.build.rows.length-1); render(); break;
+    case 'open-ingredient-lookup': UI.modal.build.lookup = {open:true,query:'',status:'idle',candidate:null,confirmationToken:null,error:''}; PENDING_FOCUS='ingredient-lookup-query'; render(); break;
+    case 'close-ingredient-lookup': UI.modal.build.lookup = {open:false,query:'',status:'idle',candidate:null,confirmationToken:null,error:''}; render(); break;
+    case 'search-missing-ingredient': searchMissingIngredient(); break;
+    case 'publish-shared-ingredient': publishSharedIngredient(); break;
     case 'remove-ing-row': removeIngRow(Number(actionEl.getAttribute('data-idx'))); break;
     case 'pick-ingredient': pickIngredient(Number(actionEl.getAttribute('data-idx')), actionEl.getAttribute('data-ing')); break;
     case 'save-build': handleSaveBuild(); break;
@@ -1381,6 +1445,12 @@ function onAppInput(e){
     return;
   }
   if (id === 'build-name-input'){ UI.modal.build.name = e.target.value; updateBuildTotalsDisplay(); return; }
+  if (id === 'ingredient-lookup-query'){
+    UI.modal.build.lookup.query = e.target.value; UI.modal.build.lookup.error = ''; UI.modal.build.lookup.candidate = null; UI.modal.build.lookup.confirmationToken = null;
+    var searchMissingBtn = document.querySelector('[data-action="search-missing-ingredient"]');
+    if (searchMissingBtn) searchMissingBtn.disabled = e.target.value.trim().length < 2;
+    return;
+  }
   if (id.indexOf('ing-search-') === 0){
     var idx = Number(id.slice('ing-search-'.length));
     var row = UI.modal.build.rows[idx];
@@ -1448,6 +1518,7 @@ function init(){
   appEl.addEventListener('keydown', onAppKeydown);
   render();
   initPersistence();
+  loadSharedIngredients();
 }
 function computeBuildTotals(rows){
   var t = { kcal:0, p:0, c:0, f:0 };
