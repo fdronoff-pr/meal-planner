@@ -7,7 +7,7 @@
     "check": "wrangler deploy --dry-run"
   },
   "devDependencies": {
-    "@google/genai": "^1.30.0",
+    "@google/genai": "^2.19.0",
     "wrangler": "^4.126.0"
   }
 }
