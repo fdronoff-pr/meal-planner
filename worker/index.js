@@ -115,7 +115,7 @@ async function searchIngredient(request, env) {
   let interaction;
   try {
     interaction = await ai.interactions.create({
-      model:'gemini-3.7-flash',
+      model:'gemini-2.5-flash-lite',
       input:`Find reliable nutritional information for the basic ingredient "${query}". Return cooked and raw or uncooked values per 100g, not per serving. Prefer government, recognised nutrition databases, or manufacturer sources. Do not return a recipe or complete meal. Use a short clean ingredient name. Include the exact source URLs used.`,
       tools:[{ type:'google_search' }],
       response_format:{ type:'text', mime_type:'application/json', schema:INGREDIENT_SCHEMA }
