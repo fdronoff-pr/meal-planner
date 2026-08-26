@@ -112,12 +112,20 @@ async function searchIngredient(request, env) {
   if (existing) return json({ error:existing.name + ' is already in the shared list.' }, { status:409 });
 
   const ai = new GoogleGenAI({ apiKey:env.GEMINI_API_KEY });
-  const interaction = await ai.interactions.create({
-    model:'gemini-3.7-flash',
-    input:`Find reliable nutritional information for the basic ingredient "${query}". Return cooked and raw or uncooked values per 100g, not per serving. Prefer government, recognised nutrition databases, or manufacturer sources. Do not return a recipe or complete meal. Use a short clean ingredient name. Include the exact source URLs used.`,
-    tools:[{ type:'google_search' }],
-    response_format:{ type:'text', mime_type:'application/json', schema:INGREDIENT_SCHEMA }
-  });
+  let interaction;
+  try {
+    interaction = await ai.interactions.create({
+      model:'gemini-3.7-flash',
+      input:`Find reliable nutritional information for the basic ingredient "${query}". Return cooked and raw or uncooked values per 100g, not per serving. Prefer government, recognised nutrition databases, or manufacturer sources. Do not return a recipe or complete meal. Use a short clean ingredient name. Include the exact source URLs used.`,
+      tools:[{ type:'google_search' }],
+      response_format:{ type:'text', mime_type:'application/json', schema:INGREDIENT_SCHEMA }
+    });
+  } catch (error) {
+    const upstreamStatus = Number(error && error.status) || 502;
+    const diagnostic = cleanText(error && error.message, 180).replace(/key=[^&\s]+/gi, 'key=[redacted]');
+    console.error(JSON.stringify({ message:'Gemini ingredient search failed', upstreamStatus, diagnostic }));
+    return json({ error:'Google ingredient search failed.', upstreamStatus, diagnostic }, { status:502 });
+  }
   let parsed;
   try { parsed = JSON.parse(interaction.output_text); } catch { return json({ error:'Google search did not return usable nutrition data.' }, { status:502 }); }
   const candidate = normalizeCandidate(parsed);
@@ -169,6 +177,7 @@ export default {
       if (url.pathname === '/api/health') {
         return Response.json({
           ok: true,
+          release: 'ingredients-v2',
           databaseConfigured: Boolean(env.DB),
           geminiConfigured: Boolean(env.GEMINI_API_KEY)
         });
