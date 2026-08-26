@@ -214,6 +214,8 @@ var CREATE_ACCOUNT = { name:'', avatar:0 };
 var UI = { activeView:'today', selectedDate: todayISO(), modal:null, plannerTags:[], plannerMaxCal:'',
   plannerResults:null, plannerMeal:'day', editingGoal:false, wizardDraft:null, wizardStep:'form',
   wizardPaceOptions:null, wizardProfileDraft:null };
+var BARCODE_CONTROLS = null;
+var BARCODE_READER = null;
 
 function loadInitialState(){
   var raw = document.getElementById('state-data').textContent;
@@ -776,12 +778,13 @@ function openAddModal(meal){
   UI.modal = {
     meal: meal, tab:'search', query:'', results:{yours:[],common:[]}, selected:null,
     portionWhole:1, portionFrac:'0',
+    scan:{ status:'idle', barcode:'', manualCode:'', product:null, error:'' },
     build:{ name:'', rows:[{ ingredientId:null, ingredientName:'', grams:100, query:'', raw:false }], portionWhole:1, portionFrac:'0',
       lookup:{ open:false, query:'', status:'idle', candidate:null, confirmationToken:null, error:'' } }
   };
   render();
 }
-function closeAddModal(){ UI.modal = null; render(); }
+function closeAddModal(){ stopBarcodeScanner(); UI.modal = null; render(); }
 
 function openEditEntryModal(meal, entryId){
   var day = ensureDay(UI.selectedDate);
@@ -818,9 +821,10 @@ function renderModal(){
         '<div class="modal__head"><h3>Add to ' + mealLabel + '</h3><button class="icon-btn" data-action="close-modal">&times;</button></div>' +
         '<div class="modal__tabs">' +
           '<button class="tab ' + (m.tab==='search'?'active':'') + '" data-action="modal-tab" data-tab="search">Search</button>' +
+          '<button class="tab ' + (m.tab==='scan'?'active':'') + '" data-action="modal-tab" data-tab="scan">Scan barcode</button>' +
           '<button class="tab ' + (m.tab==='build'?'active':'') + '" data-action="modal-tab" data-tab="build">Build from ingredients</button>' +
         '</div>' +
-        '<div class="modal__body">' + (m.tab === 'search' ? renderSearchTab(m) : renderBuildTab(m)) + '</div>' +
+        '<div class="modal__body">' + (m.tab === 'search' ? renderSearchTab(m) : (m.tab === 'scan' ? renderScanTab(m) : renderBuildTab(m))) + '</div>' +
       '</div>' +
     '</div>'
   );
@@ -894,6 +898,36 @@ function renderSearchResults(results){
   }
   html += '</div>';
   return html;
+}
+
+function renderScanTab(m){
+  var scan = m.scan || {status:'idle',barcode:'',manualCode:'',product:null,error:''};
+  var content = '';
+  if (scan.status === 'scanning'){
+    content = '<div class="barcode-camera"><video id="barcode-video" playsinline muted></video><div class="barcode-frame" aria-hidden="true"></div></div>' +
+      '<p class="hint barcode-help">Hold the product barcode inside the frame.</p>' +
+      '<button class="btn btn--ghost btn--block" data-action="stop-barcode-scan">Cancel scan</button>';
+  } else if (scan.status === 'looking'){
+    content = '<div class="barcode-status"><span class="barcode-spinner"></span><strong>Looking up ' + esc(scan.barcode) + '…</strong><span class="hint">Checking Open Food Facts.</span></div>';
+  } else if (scan.status === 'found' && scan.product){
+    var product = scan.product;
+    content = '<div class="barcode-product">' +
+      (product.imageUrl ? '<img src="' + esc(product.imageUrl) + '" alt="" loading="lazy">' : '<div class="barcode-product__placeholder">▦</div>') +
+      '<div><span class="hint">Barcode ' + esc(product.barcode) + '</span><h4>' + esc(product.name) + '</h4>' +
+      '<a href="' + esc(product.sourceUrl) + '" target="_blank" rel="noopener noreferrer">View source</a></div></div>' +
+      renderSelectedFoodPanel(m) +
+      '<button class="btn btn--ghost btn--block" data-action="scan-another-barcode">Scan another product</button>';
+  } else {
+    content = '<div class="barcode-intro"><div class="barcode-icon" aria-hidden="true">▥</div><h4>Scan a food package</h4>' +
+      '<p>Use the rear camera to find the product and its nutrition automatically.</p>' +
+      '<button class="btn btn--primary btn--block" data-action="start-barcode-scan">Open camera</button></div>' +
+      '<div class="barcode-manual"><span class="hint">Or enter the barcode number</span><div><input class="input" id="barcode-manual-input" inputmode="numeric" maxlength="14" placeholder="e.g. 5000112637922" value="' + esc(scan.manualCode) + '">' +
+      '<button class="btn btn--ghost" data-action="lookup-manual-barcode" ' + (scan.manualCode.replace(/\D/g,'').length<8?'disabled':'') + '>Look up</button></div></div>';
+  }
+  return '<section class="barcode-panel">' +
+    (scan.error ? '<div class="lookup-error">' + esc(scan.error) + '</div>' : '') + content +
+    ((scan.status === 'error') ? '<button class="btn btn--ghost btn--block" data-action="barcode-build-custom">Build this food manually</button>' : '') +
+    '<p class="barcode-credit">Product information from <a href="https://world.openfoodfacts.org/" target="_blank" rel="noopener noreferrer">Open Food Facts</a>.</p></section>';
 }
 function renderResultRow(item, source){
   return (
@@ -1254,6 +1288,90 @@ function handleConfirmAdd(){
   addLogEntry(UI.selectedDate, m.meal, m.selected, portion);
   closeAddModal();
 }
+function stopBarcodeScanner(){
+  if (BARCODE_CONTROLS){
+    try { BARCODE_CONTROLS.stop(); } catch(e){}
+    BARCODE_CONTROLS = null;
+  }
+  var video = document.getElementById('barcode-video');
+  if (video && video.srcObject && video.srcObject.getTracks){
+    video.srcObject.getTracks().forEach(function(track){ track.stop(); });
+    video.srcObject = null;
+  }
+  BARCODE_READER = null;
+}
+function switchModalTab(tab){
+  stopBarcodeScanner();
+  UI.modal.tab = tab;
+  UI.modal.selected = (tab === 'scan' && UI.modal.scan.product) ? UI.modal.scan.product : null;
+  UI.modal.portionWhole = 1; UI.modal.portionFrac = '0';
+  render();
+}
+async function startBarcodeScanner(){
+  var scan = UI.modal && UI.modal.scan;
+  if (!scan) return;
+  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    scan.status = 'error'; scan.error = 'Camera scanning is not supported in this browser. Enter the barcode number instead.'; render(); return;
+  }
+  if (!window.PortionBarcode || !window.PortionBarcode.BrowserMultiFormatReader){
+    scan.status = 'error'; scan.error = 'The barcode scanner could not load. Please refresh the page and try again.'; render(); return;
+  }
+  stopBarcodeScanner();
+  scan.status = 'scanning'; scan.error = ''; scan.product = null; UI.modal.selected = null; render();
+  try {
+    var reader = new window.PortionBarcode.BrowserMultiFormatReader(undefined, {delayBetweenScanAttempts:150});
+    BARCODE_READER = reader;
+    var controls = await reader.decodeFromConstraints(
+      {video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false},
+      document.getElementById('barcode-video'),
+      function(result, error, callbackControls){
+        if (!result || !UI.modal || UI.modal.tab !== 'scan' || UI.modal.scan.status !== 'scanning') return;
+        callbackControls.stop(); BARCODE_CONTROLS = null;
+        lookupBarcodeProduct(result.getText());
+      }
+    );
+    if (!UI.modal || UI.modal.tab !== 'scan' || UI.modal.scan.status !== 'scanning') controls.stop();
+    else BARCODE_CONTROLS = controls;
+  } catch(error){
+    stopBarcodeScanner();
+    if (!UI.modal || !UI.modal.scan) return;
+    scan = UI.modal.scan; scan.status = 'error';
+    scan.error = error && error.name === 'NotAllowedError'
+      ? 'Camera access was denied. Allow camera access in your browser settings or enter the barcode number.'
+      : 'The camera could not start. Enter the barcode number or try again.';
+    render();
+  }
+}
+async function lookupBarcodeProduct(value){
+  var barcode = String(value || '').replace(/\D/g, '');
+  var scan = UI.modal && UI.modal.scan;
+  if (!scan || barcode.length < 8 || barcode.length > 14){
+    if (scan){ scan.status = 'error'; scan.error = 'Enter a valid 8–14 digit barcode.'; render(); }
+    return;
+  }
+  stopBarcodeScanner();
+  scan.status = 'looking'; scan.barcode = barcode; scan.error = ''; scan.product = null; UI.modal.selected = null; render();
+  try {
+    var response = await fetch('/api/products/' + encodeURIComponent(barcode));
+    var payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || 'Product lookup failed.');
+    if (!UI.modal || UI.modal.tab !== 'scan') return;
+    var source = payload.product;
+    var displayName = source.brand && norm(source.name).indexOf(norm(source.brand)) === -1 ? source.brand + ' ' + source.name : source.name;
+    var product = { id:'barcode_' + source.barcode, barcode:source.barcode, name:displayName, serving:'100 g',
+      kcal:source.kcal, p:source.p, c:source.c, f:source.f, imageUrl:source.imageUrl || '', sourceUrl:source.sourceUrl };
+    scan = UI.modal.scan; scan.status = 'found'; scan.product = product; UI.modal.selected = product;
+    UI.modal.portionWhole = 1; UI.modal.portionFrac = '0'; render();
+  } catch(error){
+    if (!UI.modal || UI.modal.tab !== 'scan') return;
+    scan = UI.modal.scan; scan.status = 'error'; scan.error = error.message || 'Product lookup failed.'; render();
+  }
+}
+function resetBarcodeScan(){
+  stopBarcodeScanner();
+  if (!UI.modal || !UI.modal.scan) return;
+  UI.modal.scan = {status:'idle',barcode:'',manualCode:'',product:null,error:''}; UI.modal.selected = null; render();
+}
 function removeIngRow(idx){
   var rows = UI.modal.build.rows;
   if (rows.length <= 1) rows[idx] = { ingredientId:null, ingredientName:'', grams:100, query:'', raw:false };
@@ -1393,7 +1511,12 @@ function onAppClick(e){
     case 'date-next': UI.selectedDate = addDaysISO(UI.selectedDate, 1); render(); break;
     case 'open-add': openAddModal(actionEl.getAttribute('data-meal')); break;
     case 'close-modal': closeAddModal(); break;
-    case 'modal-tab': UI.modal.tab = actionEl.getAttribute('data-tab'); render(); break;
+    case 'modal-tab': switchModalTab(actionEl.getAttribute('data-tab')); break;
+    case 'start-barcode-scan': startBarcodeScanner(); break;
+    case 'stop-barcode-scan': resetBarcodeScan(); break;
+    case 'scan-another-barcode': resetBarcodeScan(); break;
+    case 'lookup-manual-barcode': lookupBarcodeProduct(UI.modal.scan.manualCode); break;
+    case 'barcode-build-custom': switchModalTab('build'); break;
     case 'select-food': handleSelectFood(actionEl.getAttribute('data-source'), actionEl.getAttribute('data-id')); break;
     case 'confirm-add': handleConfirmAdd(); break;
     case 'remove-entry': removeLogEntry(UI.selectedDate, actionEl.getAttribute('data-meal'), actionEl.getAttribute('data-id')); break;
@@ -1444,6 +1567,13 @@ function onAppInput(e){
     if (selEl) selEl.innerHTML = '';
     return;
   }
+  if (id === 'barcode-manual-input'){
+    UI.modal.scan.manualCode = e.target.value.replace(/\D/g, '').slice(0,14);
+    if (e.target.value !== UI.modal.scan.manualCode) e.target.value = UI.modal.scan.manualCode;
+    var lookupBarcodeBtn = document.querySelector('[data-action="lookup-manual-barcode"]');
+    if (lookupBarcodeBtn) lookupBarcodeBtn.disabled = UI.modal.scan.manualCode.length < 8;
+    return;
+  }
   if (id === 'build-name-input'){ UI.modal.build.name = e.target.value; updateBuildTotalsDisplay(); return; }
   if (id === 'ingredient-lookup-query'){
     UI.modal.build.lookup.query = e.target.value; UI.modal.build.lookup.error = ''; UI.modal.build.lookup.candidate = null; UI.modal.build.lookup.confirmationToken = null;
@@ -1491,6 +1621,9 @@ function onAppChange(e){
   if (id === 'planner-mode'){ UI.plannerMeal = e.target.value; render(); return; }
 }
 function onAppKeydown(e){
+  if (e.target && e.target.id === 'barcode-manual-input' && e.key === 'Enter'){
+    e.preventDefault(); lookupBarcodeProduct(UI.modal.scan.manualCode); return;
+  }
   if (e.target && e.target.id === 'planner-tag-input' && (e.key === 'Enter' || e.key === ',')){
     e.preventDefault();
     var val = e.target.value.trim().replace(/,$/, '');

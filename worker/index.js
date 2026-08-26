@@ -37,6 +37,15 @@ async function ensureSchema(env) {
     )`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS ingredient_candidates (
       token TEXT PRIMARY KEY, candidate_json TEXT NOT NULL, expires_at TEXT NOT NULL
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS barcode_products (
+      barcode TEXT PRIMARY KEY, name TEXT NOT NULL, brand TEXT NOT NULL DEFAULT '',
+      image_url TEXT NOT NULL DEFAULT '', kcal REAL NOT NULL, protein REAL NOT NULL,
+      carbs REAL NOT NULL, fat REAL NOT NULL, source_url TEXT NOT NULL, updated_at TEXT NOT NULL
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS barcode_lookup_limits (
+      visitor_hash TEXT NOT NULL, minute TEXT NOT NULL, request_count INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (visitor_hash, minute)
     )`)
   ]);
 }
@@ -172,6 +181,77 @@ async function publishIngredient(request, env) {
     raw:{kcal:candidate.raw.kcal,p:candidate.raw.protein,c:candidate.raw.carbs,f:candidate.raw.fat},sources:candidate.sourceUrls } }, { status:201 });
 }
 
+function barcodeProductFromRow(row) {
+  return {
+    barcode:row.barcode, name:row.name, brand:row.brand || '', imageUrl:row.image_url || '',
+    serving:'100 g', kcal:row.kcal, p:row.protein, c:row.carbs, f:row.fat,
+    sourceUrl:row.source_url
+  };
+}
+
+function normalizeOpenFoodFactsProduct(barcode, input) {
+  const product = input && input.product || {};
+  const nutrients = product.nutriments || {};
+  const name = cleanText(product.product_name_en || product.product_name || product.generic_name_en, 120);
+  const brand = cleanText(product.brands, 80);
+  const imageUrl = cleanText(product.image_front_small_url, 500);
+  const kcal = cleanNumber(nutrients['energy-kcal_100g']);
+  const protein = cleanNumber(nutrients.proteins_100g);
+  const carbs = cleanNumber(nutrients.carbohydrates_100g);
+  const fat = cleanNumber(nutrients.fat_100g);
+  if (!name || [kcal,protein,carbs,fat].some(function(value){ return value === null; })) return null;
+  return {
+    barcode, name, brand, imageUrl:imageUrl.startsWith('https://') ? imageUrl : '',
+    serving:'100 g', kcal, p:protein, c:carbs, f:fat,
+    sourceUrl:'https://world.openfoodfacts.org/product/' + barcode
+  };
+}
+
+async function useBarcodeLookupAllowance(request, env) {
+  const visitor = await visitorHash(request);
+  const minute = new Date().toISOString().slice(0, 16);
+  await env.DB.prepare(`INSERT INTO barcode_lookup_limits (visitor_hash, minute, request_count) VALUES (?, ?, 1)
+    ON CONFLICT(visitor_hash, minute) DO UPDATE SET request_count = request_count + 1`)
+    .bind(visitor.hash, minute).run();
+  const row = await env.DB.prepare('SELECT request_count FROM barcode_lookup_limits WHERE visitor_hash = ? AND minute = ?')
+    .bind(visitor.hash, minute).first();
+  return Number(row && row.request_count || 0) <= 5;
+}
+
+async function lookupBarcode(request, env, barcode) {
+  await ensureSchema(env);
+  const cached = await env.DB.prepare('SELECT * FROM barcode_products WHERE barcode = ?').bind(barcode).first();
+  if (cached) return json({ product:barcodeProductFromRow(cached), cached:true });
+  if (!await useBarcodeLookupAllowance(request, env)) {
+    return json({ error:'Too many barcode lookups. Please wait a minute and try again.' }, { status:429 });
+  }
+
+  const fields = 'code,product_name,product_name_en,generic_name_en,brands,image_front_small_url,nutriments';
+  const response = await fetch('https://world.openfoodfacts.org/api/v2/product/' + barcode + '?fields=' + fields, {
+    headers:{
+      'Accept':'application/json',
+      'User-Agent':'Portion Meal Planner/1.0 (https://portion-meal-planner.fdronoff.workers.dev)'
+    }
+  });
+  if (response.status === 404) return json({ error:'This barcode is not in Open Food Facts yet.' }, { status:404 });
+  if (!response.ok) return json({ error:'The product database is temporarily unavailable.' }, { status:502 });
+  const contentLength = Number(response.headers.get('Content-Length') || 0);
+  if (contentLength > 300000) return json({ error:'The product response was unexpectedly large.' }, { status:502 });
+  const payload = await response.json();
+  if (!payload || payload.status === 0) return json({ error:'This barcode is not in Open Food Facts yet.' }, { status:404 });
+  const product = normalizeOpenFoodFactsProduct(barcode, payload);
+  if (!product) return json({ error:'The product was found, but its nutrition information is incomplete.' }, { status:422 });
+
+  await env.DB.prepare(`INSERT INTO barcode_products
+    (barcode,name,brand,image_url,kcal,protein,carbs,fat,source_url,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(barcode) DO UPDATE SET name=excluded.name,brand=excluded.brand,image_url=excluded.image_url,
+      kcal=excluded.kcal,protein=excluded.protein,carbs=excluded.carbs,fat=excluded.fat,
+      source_url=excluded.source_url,updated_at=excluded.updated_at`)
+    .bind(barcode,product.name,product.brand,product.imageUrl,product.kcal,product.p,product.c,product.f,product.sourceUrl,new Date().toISOString()).run();
+  return json({ product, cached:false });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -180,7 +260,7 @@ export default {
       if (url.pathname === '/api/health') {
         return Response.json({
           ok: true,
-          release: 'ingredients-v2',
+          release: 'barcode-v1',
           databaseConfigured: Boolean(env.DB),
           geminiConfigured: Boolean(env.GEMINI_API_KEY)
         });
@@ -189,6 +269,9 @@ export default {
       if (url.pathname === '/api/ingredients' && request.method === 'GET') return await listIngredients(env);
       if (url.pathname === '/api/ingredients/search' && request.method === 'POST') return await searchIngredient(request, env);
       if (url.pathname === '/api/ingredients' && request.method === 'POST') return await publishIngredient(request, env);
+      const barcodeMatch = url.pathname.match(/^\/api\/products\/(\d{8,14})$/);
+      if (barcodeMatch && request.method === 'GET') return await lookupBarcode(request, env, barcodeMatch[1]);
+      if (url.pathname.startsWith('/api/products/')) return json({ error:'Enter a valid 8–14 digit barcode.' }, { status:400 });
 
       if (url.pathname.startsWith('/api/')) {
         return Response.json({ error: 'Not found' }, { status: 404 });
