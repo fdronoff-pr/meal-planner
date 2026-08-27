@@ -53,7 +53,7 @@ h1,h2,h3,h4{font-family:var(--font-display);font-weight:600;margin:0;text-wrap:b
 .account-card{border:1px solid var(--border);background:var(--surface);border-radius:18px;padding:18px 12px;display:flex;flex-direction:column;align-items:center;gap:10px;cursor:pointer;color:var(--ink);font-weight:700;font-size:14px;}
 .account-card:hover{border-color:var(--accent);background:var(--accent-soft);transform:translateY(-1px);}.account-card--new{border-style:dashed;color:var(--accent-soft-ink);}
 .account-plus{width:68px;height:68px;border-radius:50%;display:grid;place-items:center;background:var(--surface-2);font-size:30px;font-weight:400;}
-.avatar{display:block;width:68px;height:68px;flex:none;border-radius:50%;background-image:url('/assets/profile-icons.webp');background-size:400% 300%;background-repeat:no-repeat;box-shadow:0 0 0 3px var(--surface),0 0 0 4px var(--border);}
+.avatar{display:block;width:68px;height:68px;flex:none;border-radius:50%;background-image:url('/assets/profile-icons.webp');background-size:400% 400%;background-repeat:no-repeat;box-shadow:0 0 0 3px var(--surface),0 0 0 4px var(--border);}
 .avatar--sm{width:36px;height:36px;box-shadow:0 0 0 2px var(--surface),0 0 0 3px var(--border);}.avatar-choice{border:2px solid transparent;background:none;border-radius:50%;padding:3px;cursor:pointer;}.avatar-choice.selected{border-color:var(--accent);background:var(--accent-soft);}
 .avatar-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;justify-items:center;margin:8px 0 4px;}.account-form{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:20px;}.account-form__actions{display:flex;justify-content:space-between;gap:10px;margin-top:4px;}
 .account-empty{text-align:center;color:var(--ink-muted);padding:4px 0 18px;}.account-switch{display:flex;align-items:center;gap:9px;border:none;background:none;padding:8px;border-radius:12px;color:var(--ink);cursor:pointer;text-align:left;width:100%;}.account-switch:hover{background:var(--surface-2);}.account-switch__name{display:block;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.account-switch__hint{display:block;font-size:11px;color:var(--ink-faint);}
@@ -264,4 +264,3 @@ h1,h2,h3,h4{font-family:var(--font-display);font-weight:600;margin:0;text-wrap:b
 
 .empty-hero{text-align:center;padding:40px 20px;color:var(--ink-muted);}
 .empty-hero h2{margin-bottom:8px;}
-

@@ -605,7 +605,9 @@ function render(){
 function avatarStyle(index){
   var col = index % 4, row = Math.floor(index / 4);
   var x = col === 0 ? 0 : (col === 3 ? 100 : col * 33.333);
-  var y = row === 0 ? 0 : (row === 2 ? 100 : 50);
+  // The source artwork is a square sheet with four icons per 200px-high row.
+  // Preserve its aspect ratio and offset each 150px square crop vertically.
+  var y = row === 0 ? 4.444 : (row === 2 ? 88.889 : 47.778);
   return 'background-position:' + x + '% ' + y + '%';
 }
 function renderAvatar(index, small){ return '<span class="avatar' + (small?' avatar--sm':'') + '" style="' + avatarStyle(Number(index)||0) + '"></span>'; }
