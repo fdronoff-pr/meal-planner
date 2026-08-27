@@ -644,9 +644,10 @@ function focusPendingField(){
 function renderShell(){
   var account = activeAccount() || {name:'Account',avatar:0};
   var isMobile = window.innerWidth <= 860;
+  var internalBrand = '<div class="internal-brand"><span class="internal-brand__symbol"><img src="/assets/mealpath-logo.png" alt=""></span><span class="internal-brand__copy"><span class="brand__mark">MealPath</span><span class="brand__tagline">Plan meals. Track nutrition.<br>Reach your goal.</span></span></div>';
   return (
     '<div class="topbar">' +
-      '<div class="topbar__brand">MealPath</div>' +
+      internalBrand +
       '<button class="account-switch" style="width:auto" data-action="open-account-details" aria-label="Open account details">' + renderAvatar(account.avatar,true) + '</button>' +
       '<div class="topnav">' + NAV_ITEMS.map(function(n){
         return '<button data-action="nav" data-view="' + n.key + '" class="' + (UI.activeView===n.key?'active':'') + '">' + n.label + '</button>';
@@ -654,7 +655,7 @@ function renderShell(){
     '</div>' +
     '<div class="shell">' +
       '<div class="sidebar">' +
-        '<div class="brand"><span class="brand__mark">MealPath</span></div>' +
+        internalBrand +
         '<div class="nav">' + NAV_ITEMS.map(function(n){
           return '<button class="navlink ' + (UI.activeView===n.key?'active':'') + '" data-action="nav" data-view="' + n.key + '"><span class="dot"></span>' + n.label + '</button>';
         }).join('') + '</div>' +
