@@ -612,7 +612,7 @@ function avatarStyle(index){
 }
 function renderAvatar(index, small){ return '<span class="avatar' + (small?' avatar--sm':'') + '" style="' + avatarStyle(Number(index)||0) + '"></span>'; }
 function renderAccountSelect(){
-  return '<div class="account-gate"><section class="account-panel"><div class="account-head account-head--branded"><img class="account-logo" src="/assets/mealpath-logo.png" alt="MealPath"><h1 class="visually-hidden">Welcome to MealPath</h1><p class="brand-tagline">Plan meals. Track nutrition. Reach your goal.</p><p class="account-prompt">Who is tracking today?</p></div>' +
+  return '<div class="account-gate"><section class="account-panel"><div class="account-head account-head--branded"><img class="account-logo" src="/assets/mealpath-logo.png" alt="MealPath"><h1 class="visually-hidden">Welcome to MealPath</h1><p class="account-prompt">Who is tracking today?</p></div>' +
     (!ACCOUNTS.length ? '<div class="account-empty">Create your first account to get started.</div>' : '') +
     '<div class="account-list">' + ACCOUNTS.map(function(a){ return '<button class="account-card" data-action="select-account" data-id="' + esc(a.id) + '">' + renderAvatar(a.avatar,false) + '<span>' + esc(a.name) + '</span></button>'; }).join('') +
     '<button class="account-card account-card--new" data-action="start-create-account"><span class="account-plus">+</span><span>Create new account</span></button></div></section></div>';
@@ -644,7 +644,7 @@ function focusPendingField(){
 function renderShell(){
   var account = activeAccount() || {name:'Account',avatar:0};
   var isMobile = window.innerWidth <= 860;
-  var internalBrand = '<div class="internal-brand"><span class="internal-brand__symbol"><img src="/assets/mealpath-logo.png" alt=""></span><span class="internal-brand__copy"><span class="brand__mark">MealPath</span><span class="brand__tagline">Plan meals. Track nutrition.<br>Reach your goal.</span></span></div>';
+  var internalBrand = '<div class="internal-brand"><span class="internal-brand__symbol"><img src="/assets/mealpath-logo.png" alt=""></span><span class="brand__mark">MealPath</span></div>';
   return (
     '<div class="topbar">' +
       internalBrand +
