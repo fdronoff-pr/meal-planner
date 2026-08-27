@@ -612,7 +612,7 @@ function avatarStyle(index){
 }
 function renderAvatar(index, small){ return '<span class="avatar' + (small?' avatar--sm':'') + '" style="' + avatarStyle(Number(index)||0) + '"></span>'; }
 function renderAccountSelect(){
-  return '<div class="account-gate"><section class="account-panel"><div class="account-head"><h1>Welcome to Portion</h1><p>Who is tracking today?</p></div>' +
+  return '<div class="account-gate"><section class="account-panel"><div class="account-head account-head--branded"><img class="account-logo" src="/assets/mealpath-logo.png" alt="MealPath"><h1 class="visually-hidden">Welcome to MealPath</h1><p class="brand-tagline">Plan meals. Track nutrition. Reach your goal.</p><p class="account-prompt">Who is tracking today?</p></div>' +
     (!ACCOUNTS.length ? '<div class="account-empty">Create your first account to get started.</div>' : '') +
     '<div class="account-list">' + ACCOUNTS.map(function(a){ return '<button class="account-card" data-action="select-account" data-id="' + esc(a.id) + '">' + renderAvatar(a.avatar,false) + '<span>' + esc(a.name) + '</span></button>'; }).join('') +
     '<button class="account-card account-card--new" data-action="start-create-account"><span class="account-plus">+</span><span>Create new account</span></button></div></section></div>';
@@ -646,7 +646,7 @@ function renderShell(){
   var isMobile = window.innerWidth <= 860;
   return (
     '<div class="topbar">' +
-      '<div class="topbar__brand">Portion</div>' +
+      '<div class="topbar__brand">MealPath</div>' +
       '<button class="account-switch" style="width:auto" data-action="open-account-details" aria-label="Open account details">' + renderAvatar(account.avatar,true) + '</button>' +
       '<div class="topnav">' + NAV_ITEMS.map(function(n){
         return '<button data-action="nav" data-view="' + n.key + '" class="' + (UI.activeView===n.key?'active':'') + '">' + n.label + '</button>';
@@ -654,7 +654,7 @@ function renderShell(){
     '</div>' +
     '<div class="shell">' +
       '<div class="sidebar">' +
-        '<div class="brand"><span class="brand__mark">Portion</span></div>' +
+        '<div class="brand"><span class="brand__mark">MealPath</span></div>' +
         '<div class="nav">' + NAV_ITEMS.map(function(n){
           return '<button class="navlink ' + (UI.activeView===n.key?'active':'') + '" data-action="nav" data-view="' + n.key + '"><span class="dot"></span>' + n.label + '</button>';
         }).join('') + '</div>' +

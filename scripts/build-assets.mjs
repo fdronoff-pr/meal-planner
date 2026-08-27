@@ -11,7 +11,8 @@ await Promise.all([
   cp('app.js', 'dist/app.js'),
   cp('styles.css', 'dist/styles.css'),
   cp('data/ingredients-clean.js', 'dist/data/ingredients-clean.js'),
-  cp('assets/profile-icons.webp', 'dist/assets/profile-icons.webp')
+  cp('assets/profile-icons.webp', 'dist/assets/profile-icons.webp'),
+  cp('assets/mealpath-logo.png', 'dist/assets/mealpath-logo.png')
 ]);
 
 await build({
