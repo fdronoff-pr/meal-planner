@@ -591,7 +591,7 @@ function render(){
     app.innerHTML = renderAccountCreate();
   } else if (ACCOUNT_SCREEN === 'details'){
     app.innerHTML = renderAccountDetails();
-  } else if (!STATE.profile.setupComplete){
+  } else if (!STATE.profile.setupComplete || UI.editingGoal){
     app.innerHTML = renderWizardScreen();
   } else {
     app.innerHTML = renderShell();
@@ -1465,8 +1465,9 @@ function handleWizardContinue(){
 function handleSelectPace(key){
   var opt = (UI.wizardPaceOptions || []).find(function(o){ return o.key === key; });
   if (!opt) return;
-  selectPaceAndSave(opt, UI.wizardProfileDraft);
+  var profileDraft = UI.wizardProfileDraft;
   UI.editingGoal = false; UI.wizardDraft = null; UI.wizardStep = 'form'; UI.wizardPaceOptions = null;
+  selectPaceAndSave(opt, profileDraft);
 }
 function handleLogWeight(){
   var el = document.getElementById('weight-today-input');
