@@ -8,7 +8,7 @@
   --shadow:0 1px 2px rgba(32,36,29,0.06), 0 8px 24px -12px rgba(32,36,29,0.18);
   --radius-sm:8px; --radius-md:14px; --radius-lg:20px;
   --font-display:'Fraunces',Georgia,'Times New Roman',serif;
-  --font-body:'Public Sans',-apple-system,'Segoe UI',Roboto,sans-serif;
+  --font-body:'Fraunces',Georgia,'Times New Roman',serif;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
