@@ -997,7 +997,7 @@ function renderBuildTab(m){
     '</div>' +
     '<div class="portion-row" style="margin-top:14px;"><span class="hint">This makes:</span>' + renderPortionSelector('build', b.portionWhole, b.portionFrac) + '<span class="hint">portion(s) to log now</span></div>' +
     '<div class="preview-row" style="margin-top:8px;">' +
-      '<span class="badge badge--kcal">= ' + scaled.kcal + ' kcal</span>' +
+      '<span class="badge badge--kcal" id="build-scaled-kcal">= ' + scaled.kcal + ' kcal</span>' +
     '</div>' +
     '<div style="margin-top:16px;"><button class="btn btn--primary btn--block" data-action="save-build" ' + (!b.name.trim() || totals.kcal<=0 || portion<=0 ? 'disabled':'') + '>Save food &amp; add to log</button></div>'
   );
@@ -1383,15 +1383,33 @@ function removeIngRow(idx){
   var rows = UI.modal.build.rows;
   if (rows.length <= 1) rows[idx] = { ingredientId:null, ingredientName:'', grams:100, query:'', raw:false };
   else rows.splice(idx, 1);
-  render();
+  refreshIngredientRows();
 }
 function pickIngredient(idx, ingId){
   var ing = INGREDIENTS_DB.find(function(i){ return i.id === ingId; });
   if (!ing) return;
   var row = UI.modal.build.rows[idx];
   row.ingredientId = ing.id; row.ingredientName = ing.name; row.query = ''; row.raw = false;
-  render();
-  PENDING_FOCUS = 'ing-grams-' + idx;
+  var rowEl = document.querySelector('.ingredient-row[data-row="' + idx + '"]');
+  if (rowEl) rowEl.outerHTML = renderIngredientRow(row, idx);
+  updateBuildTotalsDisplay();
+  var gramsEl = document.getElementById('ing-grams-' + idx);
+  if (gramsEl){ gramsEl.focus(); gramsEl.select(); }
+}
+function addIngredientRow(){
+  var rows = UI.modal.build.rows;
+  var row = { ingredientId:null, ingredientName:'', grams:100, query:'', raw:false };
+  rows.push(row);
+  var idx = rows.length - 1;
+  var host = document.getElementById('ingredient-rows');
+  if (host) host.insertAdjacentHTML('beforeend', renderIngredientRow(row, idx));
+  var searchEl = document.getElementById('ing-search-' + idx);
+  if (searchEl) searchEl.focus();
+}
+function refreshIngredientRows(){
+  var host = document.getElementById('ingredient-rows');
+  if (host) host.innerHTML = UI.modal.build.rows.map(function(row, i){ return renderIngredientRow(row, i); }).join('');
+  updateBuildTotalsDisplay();
 }
 async function searchMissingIngredient(){
   var lookup = UI.modal && UI.modal.build && UI.modal.build.lookup;
@@ -1490,6 +1508,8 @@ function updateBuildTotalsDisplay(){
     '<span class="badge badge--protein">' + totals.p + 'g protein</span>' +
     '<span class="badge badge--carb">' + totals.c + 'g carbs</span>' +
     '<span class="badge badge--fat">' + totals.f + 'g fat</span>';
+  var scaledEl = document.getElementById('build-scaled-kcal');
+  if (scaledEl) scaledEl.textContent = '= ' + scaled.kcal + ' kcal';
   var saveBtn = document.querySelector('[data-action="save-build"]');
   var nameVal = (document.getElementById('build-name-input') || {}).value;
   if (saveBtn) saveBtn.disabled = !nameVal || totals.kcal <= 0 || portion <= 0;
@@ -1531,7 +1551,7 @@ function onAppClick(e){
     case 'edit-entry': openEditEntryModal(actionEl.getAttribute('data-meal'), actionEl.getAttribute('data-id')); break;
     case 'save-edit-entry': handleSaveEditEntry(); break;
     case 'remove-entry-modal': removeLogEntry(UI.selectedDate, UI.modal.meal, UI.modal.entryId); closeAddModal(); break;
-    case 'add-ing-row': UI.modal.build.rows.push({ ingredientId:null, ingredientName:'', grams:100, query:'', raw:false }); PENDING_FOCUS = 'ing-search-' + (UI.modal.build.rows.length-1); render(); break;
+    case 'add-ing-row': addIngredientRow(); break;
     case 'open-ingredient-lookup': UI.modal.build.lookup = {open:true,query:'',status:'idle',candidate:null,confirmationToken:null,error:''}; PENDING_FOCUS='ingredient-lookup-query'; render(); break;
     case 'close-ingredient-lookup': UI.modal.build.lookup = {open:false,query:'',status:'idle',candidate:null,confirmationToken:null,error:''}; render(); break;
     case 'search-missing-ingredient': searchMissingIngredient(); break;
