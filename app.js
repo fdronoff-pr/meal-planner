@@ -695,7 +695,11 @@ function renderToday(){
       '<p>' + (isToday(iso) ? formatDateLong(iso) : 'Log for this day') + '</p></div>' +
       '<div class="date-nav">' +
         '<button class="icon-btn" data-action="date-prev" aria-label="Previous day">&#8249;</button>' +
-        '<div class="date-nav__label">' + (isToday(iso) ? 'Today' : formatDateShort(iso)) + '</div>' +
+        '<label class="date-nav__picker">' +
+          '<span class="date-nav__label">' + (isToday(iso) ? 'Today' : formatDateShort(iso)) + '</span>' +
+          '<span class="date-nav__calendar" aria-hidden="true"></span>' +
+          '<input type="date" id="date-picker" value="' + iso + '" aria-label="Select date">' +
+        '</label>' +
         '<button class="icon-btn" data-action="date-next" aria-label="Next day">&#8250;</button>' +
       '</div>' +
     '</div>' +
@@ -1612,6 +1616,10 @@ function onAppInput(e){
 function onAppChange(e){
   var id = e.target.id;
   if (!id) return;
+  if (id === 'date-picker'){
+    if (e.target.value){ UI.selectedDate = e.target.value; render(); }
+    return;
+  }
   if (id.indexOf('ing-raw-') === 0){
     var rawIdx = Number(id.slice('ing-raw-'.length));
     UI.modal.build.rows[rawIdx].raw = !!e.target.checked;
