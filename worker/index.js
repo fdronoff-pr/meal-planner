@@ -124,7 +124,7 @@ async function searchIngredient(request, env) {
   let interaction;
   try {
     interaction = await ai.interactions.create({
-      model:'gemini-3.6-flash',
+      model:'gemini-2.5-flash',
       input:`Find reliable nutritional information for the basic ingredient "${query}". Return cooked and raw or uncooked values per 100g, not per serving. Prefer government, recognised nutrition databases, or manufacturer sources. Do not return a recipe or complete meal. Use a short clean ingredient name. Include the exact source URLs used.`,
       tools:[{ type:'google_search' }],
       response_format:{ type:'text', mime_type:'application/json', schema:INGREDIENT_SCHEMA }
@@ -134,7 +134,7 @@ async function searchIngredient(request, env) {
     const diagnostic = cleanText(error && error.message, 180).replace(/key=[^&\s]+/gi, 'key=[redacted]');
     console.error(JSON.stringify({ message:'Gemini ingredient search failed', upstreamStatus, diagnostic }));
     const publicMessage = upstreamStatus === 429
-      ? 'Google ingredient search is not active yet. The app owner needs to enable Gemini API billing.'
+      ? 'Gemini API quota is unavailable for this API key. Check that its Google Cloud project has active API billing and quota.'
       : 'Google ingredient search is temporarily unavailable.';
     return json({ error:publicMessage }, { status:502 });
   }
