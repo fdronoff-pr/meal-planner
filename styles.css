@@ -153,6 +153,7 @@ h1,h2,h3,h4{font-family:var(--font-display);font-weight:600;margin:0;text-wrap:b
 /* Date nav */
 .date-nav{display:flex;align-items:center;gap:10px;}
 .date-nav__label{font-weight:600;min-width:150px;text-align:center;}
+.date-nav .icon-btn:hover,.date-nav .icon-btn:active{background:var(--surface);color:var(--ink-muted);}
 
 /* Summary hero */
 .summary{display:flex;gap:28px;align-items:center;flex-wrap:wrap;}
