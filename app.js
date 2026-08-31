@@ -824,7 +824,7 @@ function renderModal(){
   var mealLabel = (MEAL_DEFS.find(function(d){return d.key===m.meal;}) || {label:'meal'}).label;
   return (
     '<div class="modal-overlay">' +
-      '<div class="modal">' +
+      '<div class="modal modal--food-log" role="dialog" aria-modal="true" aria-label="Add food to ' + mealLabel + '">' +
         '<div class="modal__head"><h3>Add to ' + mealLabel + '</h3><button class="icon-btn" data-action="close-modal">&times;</button></div>' +
         '<div class="modal__tabs">' +
           '<button class="tab ' + (m.tab==='search'?'active':'') + '" data-action="modal-tab" data-tab="search">Search</button>' +
@@ -884,8 +884,8 @@ function renderEditModal(m){
 
 function renderSearchTab(m){
   return (
-    '<div class="field"><label for="modal-search-input">Search your foods and common foods</label>' +
-      '<input class="input" id="modal-search-input" placeholder="e.g. grilled chicken breast" autocomplete="off" value="' + esc(m.query) + '">' +
+    '<div class="field">' +
+      '<input class="input food-search-input" id="modal-search-input" aria-label="Search foods" placeholder="Search foods, e.g. grilled chicken breast" autocomplete="off" value="' + esc(m.query) + '">' +
     '</div>' +
     '<div id="modal-search-results">' + renderSearchResults(m.results) + '</div>' +
     '<div id="selected-food-panel">' + (m.selected ? renderSelectedFoodPanel(m) : '') + '</div>' +
